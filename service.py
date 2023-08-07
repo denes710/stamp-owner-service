@@ -7,11 +7,24 @@ import secrets
 from dotenv import load_dotenv
 load_dotenv()
 
+from pubnub.pnconfiguration import PNConfiguration
+from pubnub.pubnub import PubNub
+
 host_name = os.getenv("HOSTNAME")
 server_port = int(os.getenv("SERVER_PORT"))
-TOKEN_ALLOCATION_LIMIT = int(os.getenv("TOKEN_ALLOCATION_LIMIT"))
+toke_allocation_limit = int(os.getenv("TOKEN_ALLOCATION_LIMIT"))
 
 db = {}
+
+pnconfig = PNConfiguration()
+# FIXME it is the public key
+userId = os.path.basename(__file__)
+pnconfig.publish_key = os.getenv("PUBLISH_KEY")
+pnconfig.subscribe_key = os.getenv("SUBSCRIBE_KEY")
+pnconfig.user_id = userId
+pnconfig.ssl = True
+pubnub = None
+pubnub = PubNub(pnconfig)
 
 def generate_secret_token():
     return secrets.token_hex(32)
@@ -19,7 +32,7 @@ def generate_secret_token():
 class Token:
     def __init__(self, id):
         self.id = id
-        self.channel = "chain-" + str(id)
+        self.channel = "chan-" + str(id)
         self.token = generate_secret_token()
         self.allocation = 0
         print("id:{}, token:{}".format(self.id, self.token))
@@ -27,16 +40,15 @@ class Token:
         self.allocation += 1
         self.generate_secret_token()
     def generate_secret_token(self):
-        if self.allocation > TOKEN_ALLOCATION_LIMIT:
+        if self.allocation > toke_allocation_limit:
             self.token = generate_secret_token()
             self.publish()
-    def my_publish_callback(envelope, status):
+    def my_publish_callback(self, envelope, status):
         # Check whether request successfully completed or not
         if not status.is_error():
             pass
     def publish(self):
-        None
-        # pubnub.publish().channel(self.channel).message(self.token).pn_async(self.my_publish_callback)
+        pubnub.publish().channel(self.channel).message(self.token).pn_async(self.my_publish_callback)
 
 def init_db(ids):
     for id in ids:
@@ -61,9 +73,8 @@ class MyServer(BaseHTTPRequestHandler):
             if header_value[7:] != db[body_json["uid"]].token:
                 self.send_error(401)
             db[body_json["uid"]].allocate()
-            print("End")
+            self.send_response(200)
             self.send_header("Content-type", "application/json")
-            self.send_header("Authorization", "Bearer: {}".format(db[body_json["uid"]].token))
             self.end_headers()
             response_json = {"signed_tx" : get_signed_tx()}
             self.wfile.write(json.dumps(response_json).encode(encoding='utf_8'))
