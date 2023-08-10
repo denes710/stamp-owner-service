@@ -3,6 +3,10 @@ import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import secrets
+from web3 import Web3
+
+from time import sleep
+from threading import Thread
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -13,11 +17,16 @@ from pubnub.pubnub import PubNub
 host_name = os.getenv("HOSTNAME")
 server_port = int(os.getenv("SERVER_PORT"))
 toke_allocation_limit = int(os.getenv("TOKEN_ALLOCATION_LIMIT"))
+node_url = os.getenv("NODE_URL")
+eas_addr = os.getenv("EAS_ADDR")
+private_key = os.getenv("PRIVATE_KEY")
+first_block = int(os.getenv("FIRST_BLOCK_WITH_STAMP_SCHEMA"))
+stamper_addr = os.getenv("STAMPER_ADDR")
 
 db = {}
 
 pnconfig = PNConfiguration()
-# FIXME it is the public key
+# FIXME something else
 userId = os.path.basename(__file__)
 pnconfig.publish_key = os.getenv("PUBLISH_KEY")
 pnconfig.subscribe_key = os.getenv("SUBSCRIBE_KEY")
@@ -50,13 +59,22 @@ class Token:
     def publish(self):
         pubnub.publish().channel(self.channel).message(self.token).pn_async(self.my_publish_callback)
 
-def init_db(ids):
-    for id in ids:
-        db[id] = Token(id)
-
 def get_signed_tx():
     # FIXME create a signed transaction for a requester
     return "signed_tx"
+
+def handle_event(event):
+    if event.args.attester.lower() == stamper_addr.lower():
+        db[event.args.uid] = Token(id)
+        print("New stamp found and added with uid: {} and token: {}" \
+            .format(event.args.uid, db[event.args.uid].token))
+
+def event_listener(eas_contract):
+    event_filter = eas_contract.events.Attested.createFilter(fromBlock='latest')
+    while True:
+        for attestation in event_filter.get_new_entries():
+            handle_event(attestation)
+        sleep(2)
 
 class MyServer(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -82,16 +100,36 @@ class MyServer(BaseHTTPRequestHandler):
             self.send_error(404)
 
 if __name__ == "__main__":
-    # FIXME
-    # 1. monitor all event on the a given smart contract if we share a create stamp then it can save to the map, <stamp_id>
-    # 2. create token for a secret sharer, it will be asked by the <stamp_id>
-    # 3. <stamp_id, secret> -> give me my stamp
+    # init web3
+    web3 = Web3(Web3.HTTPProvider(node_url))
+    if web3.isConnected():
+        print("-" * 50)
+        print("Web3 Connection Successful")
+        print("-" * 50)
+    else:
+        print("Web Connection Failed")
+        exit()
 
-    # FIXME this must be from the chain
-    ids = [1, 2, 3]
+    # init eas contract
+    f = open("abis/EAS.json")
+    eas_abi = json.load(f)["abi"]
+    eas_contract = web3.eth.contract(address=web3.toChecksumAddress(eas_addr), abi=eas_abi)
+    events = eas_contract.events.Attested.getLogs(fromBlock=first_block)
 
-    init_db(ids)
+    # init db from stamp ids
+    for event in events:
+        if event.args.attester.lower() == stamper_addr.lower():
+            db[event.args.uid] = Token(event.args.uid)
 
+    if len(db) == 0:
+        print("There is no corresponding stamp at the moment!")
+
+    # create a thread for listening events 
+    thread = Thread(target=event_listener, args=(eas_contract,))
+    # run the thread
+    thread.start()
+
+    # init web server
     web_server = HTTPServer((host_name, server_port), MyServer)
     print("Server started http://%s:%s" % (host_name, server_port))
 
