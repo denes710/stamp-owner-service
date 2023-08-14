@@ -19,6 +19,7 @@ public_key = os.getenv("PUBLIC_KEY")
 private_key = os.getenv("PRIVATE_KEY")
 first_block = int(os.getenv("FIRST_BLOCK_WITH_STAMP_SCHEMA"))
 stamper_addr = os.getenv("STAMPER_ADDR")
+add_stamp_schema_id = os.getenv("ADD_STAMP_SCHEMA_ID")
 stamp_schema_id = os.getenv("STAMP_SCHEMA_ID")
 chain_id = os.getenv("CHAIN_ID")
 server_secret_token = os.getenv("SERVER_SECRET_TOKEN")
@@ -29,7 +30,7 @@ if __name__ == "__main__":
     f = open("abis/EAS.json")
     eas_abi = json.load(f)["abi"]
 
-    tokenDb = TokenDb(publish_key, subscribe_key, public_key, token_allocation_limit)
+    tokenDb = TokenDb(publish_key, subscribe_key, public_key, token_allocation_limit, add_stamp_schema_id)
     tokenDb.init_token_listener(node_url, eas_addr, eas_abi, first_block, stamper_addr)
 
     # init web server

@@ -37,9 +37,10 @@ class Token:
         return secrets.token_hex(32)
 
 class TokenDb:
-    def __init__(self, publish_key, subscribe_key, user_id, allocation_limit):
+    def __init__(self, publish_key, subscribe_key, user_id, allocation_limit, add_stamp_schema_id):
         self.db = {}
         self.allocation_limit = allocation_limit
+        self.add_stamp_schema_id = add_stamp_schema_id
         self.init_pubnub(publish_key, subscribe_key, user_id)
 
     def init_pubnub(self, publish_key, subscribe_key, user_id):
@@ -78,6 +79,7 @@ class TokenDb:
                 self.check_event(event)
             sleep(2)
     def check_event(self, event):
-        if event.args.attester.lower() == self.stamper_addr.lower():
+        if event.args.attester.lower() == self.stamper_addr.lower() and \
+                event.args.schema.hex().lower() == self.add_stamp_schema_id[2:]:
             uid = "0x" + event.args.uid.hex().lower()
             self.db[uid] = Token(uid, self)
