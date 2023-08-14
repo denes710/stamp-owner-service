@@ -5,7 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import secrets
 from web3 import Web3
-from eth_account.messages import encode_defunct
+from eth_account.messages import encode_structured_data
 
 from time import sleep
 from threading import Thread
@@ -15,21 +15,6 @@ load_dotenv()
 
 from pubnub.pnconfiguration import PNConfiguration
 from pubnub.pubnub import PubNub
-
-from eip712_structs import EIP712Struct, Address, Bytes, Boolean, Uint, make_domain
-
-from eth_utils.crypto import keccak
-# from eth_utils import big_endian_to_int
-# from coincurve import PrivateKey
-
-# eip712
-class Mail(EIP712Struct):
-    schema = Bytes(32)
-    recipient = Address()
-    expirationTime = Uint(64)
-    revocable = Boolean()
-    refUID = Bytes(32)
-    data = Bytes(32)
 
 class Token:
     def __init__(self, id):
@@ -84,24 +69,36 @@ def generate_secret_token():
 
 def get_delegated_attestation(receipent, refUID):
     print("Create deletagation with receipent {} and refUID {} !".format(receipent, refUID))
-    domain = make_domain(name="Stamper", version="1.0.0", chainId=chain_id, verifyingContract=stamper_addr)
-    mail = Mail(schema=stamp_schema_id, receipent=receipent, expirationTime=0, revocable=False, refUID=refUID,
-        data="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
-    # Converting it to signable bytes
-    signable_bytes = mail.signable_bytes(domain)
-    signable_bytes32 = keccak(signable_bytes)
-    print("signable bytes len: {}".format(len(signable_bytes32)))
-    message = encode_defunct(signable_bytes32)
+
+    signable_data = {
+        "types": {
+            "EIP712Domain": [
+                {"name": "name", "type": "string"},
+                {"name": "version", "type": "string"},
+                {"name": "chainId", "type": "uint256"},
+                {"name": "verifyingContract", "type": "address"},
+            ],
+            "Stamper": [
+                {"name": "schema", "type": "bytes32"},
+                {"name": "receipent", "type": "address"},
+                {"name": "expirationTime", "type": "uint64"},
+                {"name": "revocable", "type": "bool"},
+                {"name": "refUID", "type": "bytes32"},
+                {"name": "data", "type": "bytes"},
+            ],
+        },
+        "domain": {
+            "name": "Stamper",
+            "version": "1.0.0",  # TODO: Read from USDC contract?
+            "chainId": int(chain_id),
+            "verifyingContract": stamper_addr,
+        },
+        "primaryType": "Stamper",
+        "message": {"schema": bytes.fromhex(stamp_schema_id[2:]), "receipent": receipent, "expirationTime": 0, "revocable": False, "refUID": bytes.fromhex(refUID[2:]), "data": bytes()},
+    }
+
+    message = encode_structured_data(signable_data)
     signed_message = web3.eth.account.sign_message(message, private_key=private_key)
-
-#    pk = PrivateKey.from_hex(private_key[2:])
-#    signature = pk.sign_recoverable(signable_bytes, hasher=keccak)
-
-    # v = signature[64] + 27
-    # r = big_endian_to_int(signature[0:32])
-    # s = big_endian_to_int(signature[32:64])
-    print("signature len: {}".format(len(signed_message)))
-
 
     result = {
         "schema" : stamp_schema_id,
