@@ -86,7 +86,7 @@ def get_delegated_attestation(receipent, refUID):
     print("Create deletagation with receipent {} and refUID {} !".format(receipent, refUID))
     domain = make_domain(name="Stamper", version="1.0.0", chainId=chain_id, verifyingContract=stamper_addr)
     mail = Mail(schema=stamp_schema_id, receipent=receipent, expirationTime=0, revocable=False, refUID=refUID,
-        data="0x8a07523229fdc48491a5e56c76620ba40639eb940e6a2fbdf62b2799b4c86643")
+        data="0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
     # Converting it to signable bytes
     signable_bytes = mail.signable_bytes(domain)
     signable_bytes32 = keccak(signable_bytes)
@@ -110,7 +110,7 @@ def get_delegated_attestation(receipent, refUID):
             "expirationTime" : 0,
             "revocable" : False,
             "refUID" : refUID,
-            "data" : True,
+            "data" : "",
             "value" : 0
         },
         "signature" : {
